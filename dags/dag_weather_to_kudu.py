@@ -26,7 +26,13 @@ IMPALA_TABLE = os.getenv("IMPALA_TABLE")
 def get_impala_connection():
     for host in IMPALA_HOSTS:
         try:
-            conn = connect(host=host, port=IMPALA_PORT, database=IMPALA_DB)
+            conn = connect(
+                    host=host,
+                    port=IMPALA_PORT,
+                    database=IMPALA_DB,
+                    auth_mechanism='GSSAPI'
+                )
+
             print(f"✅ Connected to Impala host: {host}")
             return conn
         except Exception as e:
