@@ -17,27 +17,23 @@ load_dotenv("/app/mount/resource-tomy/.env")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 CITY_NAME = os.getenv("CITY_NAME")
 
-IMPALA_HOSTS = os.getenv("IMPALA_HOSTS", "").split(",")
+IMPALA_HOST = os.getenv("IMPALA_HOST")
 IMPALA_PORT = int(os.getenv("IMPALA_PORT", "21050"))
 IMPALA_DB = os.getenv("IMPALA_DB")
 IMPALA_TABLE = os.getenv("IMPALA_TABLE")
 
-# --- Helper: Koneksi ke Impala dengan failover ---
-def get_impala_connection():
-    for host in IMPALA_HOSTS:
-        try:
-            conn = connect(
-                    host=host,
-                    port=IMPALA_PORT,
-                    database=IMPALA_DB,
-                    auth_mechanism='GSSAPI'
-                )
-
-            print(f"✅ Connected to Impala host: {host}")
-            return conn
-        except Exception as e:
-            print(f"⚠️ Gagal konek ke {host}: {e}")
-    raise Exception("❌ Tidak bisa konek ke salah satu host Impala")
+# --- Helper: koneksi Impala SSL + Kerberos ---
+def connect_to_impala_ssl():
+    conn = connect(
+        host=IMPALA_HOST,
+        port=IMPALA_PORT,
+        database=IMPALA_DB,
+        auth_mechanism='GSSAPI',
+        use_ssl=True,
+        kerberos_service_name='impala'
+    )
+    print(f"✅ Connected to Impala host: {IMPALA_HOST} (SSL + Kerberos)")
+    return conn
 
 # --- Fungsi: Ambil data cuaca dari API ---
 def fetch_weather_data():
@@ -67,7 +63,7 @@ def insert_to_kudu():
     else:
         dt = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-    conn = get_impala_connection()
+    conn = connect_to_impala_ssl()
     cursor = conn.cursor()
 
     insert_sql = f"""
