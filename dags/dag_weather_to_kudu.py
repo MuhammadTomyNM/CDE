@@ -4,12 +4,18 @@ from datetime import datetime, timedelta
 import requests
 import logging
 from impala.dbapi import connect
+from dotenv import load_dotenv
 import os
 
-# Load environment variables
-API_KEY = os.getenv("WEATHER_API_KEY")
+# Load environment variables dari .env
+load_dotenv("/app/mount/resource-tomy/.env")
+
+API_KEY = os.getenv("OPENWEATHER_API_KEY")
 IMPALA_HOST = os.getenv("IMPALA_HOST")
 IMPALA_PORT = int(os.getenv("IMPALA_PORT", 21050))
+IMPALA_DB = os.getenv("IMPALA_DB")
+IMPALA_TABLE = os.getenv("IMPALA_TABLE")
+CITY_NAME = os.getenv("CITY_NAME")
 
 default_args = {
     "owner": "airflow",
@@ -19,8 +25,17 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
+def connect_to_impala_ssl():
+    return connect(
+        host=IMPALA_HOST,
+        port=IMPALA_PORT,
+        auth_mechanism="GSSAPI",
+        use_ssl=True,
+        kerberos_service_name="impala",
+    )
+
 def fetch_and_insert_weather():
-    url = f"http://api.openweathermap.org/data/2.5/weather?q=Jakarta&appid={API_KEY}&units=metric"
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY_NAME}&appid={API_KEY}&units=metric"
     response = requests.get(url)
     data = response.json()
 
@@ -33,20 +48,21 @@ def fetch_and_insert_weather():
 
     temp = data["main"]["temp"]
     humidity = data["main"]["humidity"]
+    pressure = data["main"].get("pressure", 0)
+    weather_desc = data["weather"][0]["description"] if "weather" in data else "unknown"
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Insert ke Kudu lewat Impala
-    conn = connect(
-        host=IMPALA_HOST,
-        port=IMPALA_PORT,
-        auth_mechanism="GSSAPI",
-        use_ssl=True,
-        kerberos_service_name="impala",
-    )
+    conn = connect_to_impala_ssl()
     cursor = conn.cursor()
-    cursor.execute(
-        f"INSERT INTO weather_data (city, temp, humidity, ts) "
-        f"VALUES ('Jakarta', {temp}, {humidity}, NOW())"
-    )
+    query = f"""
+        INSERT INTO {IMPALA_DB}.{IMPALA_TABLE}
+        VALUES ('{CITY_NAME}', {temp}, {humidity}, {pressure}, '{weather_desc}', CAST('{ts}' AS TIMESTAMP))
+    """
+    logging.info(f"Executing query: {query}")
+    cursor.execute(query)
+
+    cursor.close()
     conn.close()
     logging.info("Data inserted into Kudu successfully.")
 
