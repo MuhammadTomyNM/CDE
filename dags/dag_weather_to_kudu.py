@@ -11,7 +11,7 @@ from impala.dbapi import connect
 print(">> DAG started parsing...")
 
 # Path .env di CDE (resource mount path)
-load_dotenv("/app/mount/env_weather/.env")
+load_dotenv("/app/mount/resource-tomy/.env")
 
 # --- Konfigurasi dari .env ---
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
